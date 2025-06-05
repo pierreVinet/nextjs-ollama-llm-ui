@@ -107,9 +107,10 @@ export function Sidebar({
                     <div className="flex gap-3 items-center truncate">
                       <div className="flex flex-col">
                         <span className="text-xs font-normal ">
-                          {chat.messages.length > 0
-                            ? chat.messages[0].content
-                            : ""}
+                          {chat.title ||
+                            (chat.messages.length > 0
+                              ? chat.messages[0].content
+                              : "New Chat")}
                         </span>
                       </div>
                     </div>

@@ -21,6 +21,32 @@ export interface ChatProps {
 }
 
 export default function Chat({ initialMessages, id, isMobile }: ChatProps) {
+  const base64Images = useChatStore((state) => state.base64Images);
+  const setBase64Images = useChatStore((state) => state.setBase64Images);
+  const selectedModel = useChatStore((state) => state.selectedModel);
+  const saveMessages = useChatStore((state) => state.saveMessages);
+  const getMessagesById = useChatStore((state) => state.getMessagesById);
+  const generateChatTitle = useChatStore((state) => state.generateChatTitle);
+  const getChatById = useChatStore((state) => state.getChatById);
+  const router = useRouter();
+
+  // Check if this is the first assistant message and trigger title generation
+  const shouldGenerateTitle = React.useCallback(
+    (allMessages: Message[]) => {
+      const chat = getChatById(id);
+      if (chat?.title) return false; // Already has a title
+
+      const assistantMessages = allMessages.filter(
+        (msg) => msg.role === "assistant"
+      );
+      const userMessages = allMessages.filter((msg) => msg.role === "user");
+
+      // Generate title if this is the first assistant response
+      return assistantMessages.length === 1 && userMessages.length >= 1;
+    },
+    [getChatById, id]
+  );
+
   const {
     messages,
     input,
@@ -41,7 +67,27 @@ export default function Chat({ initialMessages, id, isMobile }: ChatProps) {
     },
     onFinish: (message) => {
       setLoadingSubmit(false);
-      saveMessages(id, [...messages, message]);
+      const updatedMessages = [...messages, message];
+      saveMessages(id, updatedMessages);
+
+      // Generate title if this is the first assistant message
+      if (shouldGenerateTitle(updatedMessages)) {
+        const firstUserMessage = updatedMessages.find(
+          (msg) => msg.role === "user"
+        );
+        const firstAssistantMessage = updatedMessages.find(
+          (msg) => msg.role === "assistant"
+        );
+
+        if (firstUserMessage && firstAssistantMessage) {
+          generateChatTitle(
+            id,
+            firstUserMessage.content as string,
+            firstAssistantMessage.content as string
+          );
+        }
+      }
+
       router.replace(`/c/${id}`);
     },
     onError: (error) => {
@@ -53,12 +99,6 @@ export default function Chat({ initialMessages, id, isMobile }: ChatProps) {
   });
   const [loadingSubmit, setLoadingSubmit] = React.useState(false);
   const formRef = useRef<HTMLFormElement>(null);
-  const base64Images = useChatStore((state) => state.base64Images);
-  const setBase64Images = useChatStore((state) => state.setBase64Images);
-  const selectedModel = useChatStore((state) => state.selectedModel);
-  const saveMessages = useChatStore((state) => state.saveMessages);
-  const getMessagesById = useChatStore((state) => state.getMessagesById);
-  const router = useRouter();
 
   const onSubmit = React.useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {

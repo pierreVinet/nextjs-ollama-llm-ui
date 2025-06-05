@@ -5,6 +5,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 interface ChatSession {
   messages: Message[];
   createdAt: string;
+  title?: string;
 }
 
 interface State {
@@ -25,6 +26,12 @@ interface Actions {
   getChatById: (chatId: string) => ChatSession | undefined;
   getMessagesById: (chatId: string) => Message[];
   saveMessages: (chatId: string, messages: Message[]) => void;
+  updateChatTitle: (chatId: string, title: string) => void;
+  generateChatTitle: (
+    chatId: string,
+    firstUserMessage: string,
+    firstAssistantMessage: string
+  ) => Promise<void>;
   handleDelete: (chatId: string, messageId?: string) => void;
   setUserName: (userName: string) => void;
   startDownload: (modelName: string) => void;
@@ -42,7 +49,7 @@ const useChatStore = create<State & Actions>()(
       userName: "Anonymous",
       isDownloading: false,
       downloadProgress: 0,
-      downloadingModel: null, 
+      downloadingModel: null,
 
       setBase64Images: (base64Images) => set({ base64Images }),
       setUserName: (userName) => set({ userName }),
@@ -67,10 +74,102 @@ const useChatStore = create<State & Actions>()(
               [chatId]: {
                 messages: [...messages],
                 createdAt: existingChat?.createdAt || new Date().toISOString(),
+                title: existingChat?.title,
               },
             },
           };
         });
+      },
+      updateChatTitle: (chatId, title) => {
+        set((state) => {
+          const existingChat = state.chats[chatId];
+          if (!existingChat) return state;
+
+          return {
+            chats: {
+              ...state.chats,
+              [chatId]: {
+                ...existingChat,
+                title,
+              },
+            },
+          };
+        });
+      },
+      generateChatTitle: async (
+        chatId,
+        firstUserMessage,
+        firstAssistantMessage
+      ) => {
+        try {
+          const prompt = `Based on this conversation, generate a short, concise title (maximum 6 words) that summarizes the main topic:
+
+User: ${firstUserMessage}
+
+Assistant: ${firstAssistantMessage}`;
+
+          // Call API to generate title using llama3.2
+          const response = await fetch("/api/generate-title", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              prompt,
+              selectedModel: "llama3.2:latest",
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to generate title");
+          }
+
+          const reader = response.body?.getReader();
+          const decoder = new TextDecoder();
+          let generatedTitle = "";
+
+          if (reader) {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              const chunk = decoder.decode(value);
+              const lines = chunk.split("\n");
+
+              for (const line of lines) {
+                if (line.startsWith("0:")) {
+                  const data = line.slice(2);
+                  try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.type === "text") {
+                      generatedTitle += parsed.text;
+                    }
+                  } catch (e) {
+                    // Ignore parsing errors
+                  }
+                }
+              }
+            }
+          }
+
+          // Clean up the title and ensure it's within limits
+          generatedTitle = generatedTitle.trim().replace(/['"]/g, "");
+          const words = generatedTitle.split(" ");
+          if (words.length > 6) {
+            generatedTitle = words.slice(0, 6).join(" ");
+          }
+
+          // Fallback to first user message if title generation failed
+          if (!generatedTitle) {
+            generatedTitle =
+              firstUserMessage.slice(0, 50) +
+              (firstUserMessage.length > 50 ? "..." : "");
+          }
+
+          get().updateChatTitle(chatId, generatedTitle);
+        } catch (error) {
+          console.error("Error generating chat title:", error);
+        }
       },
       handleDelete: (chatId, messageId) => {
         set((state) => {
@@ -102,9 +201,17 @@ const useChatStore = create<State & Actions>()(
       },
 
       startDownload: (modelName) =>
-        set({ isDownloading: true, downloadingModel: modelName, downloadProgress: 0 }),
+        set({
+          isDownloading: true,
+          downloadingModel: modelName,
+          downloadProgress: 0,
+        }),
       stopDownload: () =>
-        set({ isDownloading: false, downloadingModel: null, downloadProgress: 0 }),
+        set({
+          isDownloading: false,
+          downloadingModel: null,
+          downloadProgress: 0,
+        }),
       setDownloadProgress: (progress) => set({ downloadProgress: progress }),
     }),
     {
