@@ -116,7 +116,7 @@ export default function Chat({ initialMessages, id, isMobile }: ChatProps) {
   }, [stop]);
 
   return (
-    <div className="flex flex-col w-full max-w-3xl h-full">
+    <div className="flex flex-col w-full max-w-6xl h-full">
       <ChatTopbar
         isLoading={isLoading}
         chatId={id}
