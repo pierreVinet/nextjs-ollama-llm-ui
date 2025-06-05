@@ -40,9 +40,8 @@ export default function Chat({ initialMessages, id, isMobile }: ChatProps) {
       }
     },
     onFinish: (message) => {
-      const savedMessages = getMessagesById(id);
-      saveMessages(id, [...savedMessages, message]);
       setLoadingSubmit(false);
+      saveMessages(id, [...messages, message]);
       router.replace(`/c/${id}`);
     },
     onError: (error) => {
@@ -61,59 +60,60 @@ export default function Chat({ initialMessages, id, isMobile }: ChatProps) {
   const getMessagesById = useChatStore((state) => state.getMessagesById);
   const router = useRouter();
 
-  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    window.history.replaceState({}, "", `/c/${id}`);
+  const onSubmit = React.useCallback(
+    (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      window.history.replaceState({}, "", `/c/${id}`);
 
-    if (!selectedModel) {
-      toast.error("Please select a model");
-      return;
-    }
+      if (!selectedModel) {
+        toast.error("Please select a model");
+        return;
+      }
 
-    const userMessage: Message = {
-      id: generateId(),
-      role: "user",
-      content: input,
-    };
+      const userMessage: Message = {
+        id: generateId(),
+        role: "user",
+        content: input,
+      };
 
-    setLoadingSubmit(true);
+      setLoadingSubmit(true);
 
-    const attachments: Attachment[] = base64Images
-      ? base64Images.map((image) => ({
-          contentType: "image/base64",
-          url: image,
-        }))
-      : [];
+      const attachments: Attachment[] = base64Images
+        ? base64Images.map((image) => ({
+            contentType: "image/base64",
+            url: image,
+          }))
+        : [];
 
-    const requestOptions: ChatRequestOptions = {
-      body: {
-        selectedModel: selectedModel,
-      },
-      ...(base64Images && {
-        data: {
-          images: base64Images,
+      const requestOptions: ChatRequestOptions = {
+        body: {
+          selectedModel: selectedModel,
         },
-        experimental_attachments: attachments,
-      }),
-    };
+        ...(base64Images && {
+          data: {
+            images: base64Images,
+          },
+          experimental_attachments: attachments,
+        }),
+      };
 
-    handleSubmit(e, requestOptions);
-    saveMessages(id, [...messages, userMessage]);
-    setBase64Images(null);
-  };
+      handleSubmit(e, requestOptions);
+      setBase64Images(null);
+    },
+    [base64Images, handleSubmit, id, input, selectedModel, setBase64Images]
+  );
 
-  const removeLatestMessage = () => {
+  const removeLatestMessage = React.useCallback(() => {
     const updatedMessages = messages.slice(0, -1);
     setMessages(updatedMessages);
     saveMessages(id, updatedMessages);
     return updatedMessages;
-  };
+  }, [id, messages, saveMessages, setMessages]);
 
-  const handleStop = () => {
+  const handleStop = React.useCallback(() => {
     stop();
-    saveMessages(id, [...messages]);
     setLoadingSubmit(false);
-  };
+  }, [stop]);
 
   return (
     <div className="flex flex-col w-full max-w-3xl h-full">
